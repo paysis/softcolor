@@ -1,4 +1,4 @@
-import cv2
+from skimage import color
 import numpy as np
 
 from softcolor.aggregation_functions import conjunction_min, r_implication, implication_godel
@@ -105,17 +105,17 @@ class BaseMorphology:
 
 class MorphologyInCIELab(BaseMorphology):
 
-    def dilation(self, image_as_bgr, structuring_element):
-        lab_image = cv2.cvtColor(image_as_bgr, cv2.COLOR_BGR2LAB)
+    def dilation(self, image_as_rgb, structuring_element):
+        lab_image = color.rgb2lab(image_as_rgb)
         lab_dilation = soft_color_dilation(multivariate_image=lab_image,
                                            structuring_element=structuring_element,
                                            fuzzy_conjunction=self.conj)
-        return cv2.cvtColor(lab_dilation, cv2.COLOR_LAB2BGR)
+        return color.lab2rgb(lab_dilation)
 
-    def erosion(self, image_as_bgr, structuring_element):
-        lab_image = cv2.cvtColor(image_as_bgr, cv2.COLOR_BGR2LAB)
+    def erosion(self, image_as_rgb, structuring_element):
+        lab_image = color.rgb2lab(image_as_rgb)
         lab_erosion = soft_color_erosion(multivariate_image=lab_image,
                                          structuring_element=structuring_element,
                                          fuzzy_implication_function=self.impl)
-        return cv2.cvtColor(lab_erosion, cv2.COLOR_LAB2BGR)
+        return color.lab2rgb(lab_erosion)
 
