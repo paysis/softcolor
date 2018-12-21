@@ -8,18 +8,17 @@ if __name__=="__main__":
     img = io.imread('images/lena-512.jpg')
 
     morphology = MorphologyInCIELab()
-    img_eroded = morphology.erosion(img, structuring_element=disk(5))
-    img_dilated = morphology.dilation(img, structuring_element=disk(5))
+    se = disk(5)
+    img_eroded = morphology.erosion(img, structuring_element=se)
+    img_dilated = morphology.dilation(img, structuring_element=se)
 
-    fig, axis = plt.subplots(nrows=2, ncols=3)
+    fig, axs = plt.subplots(nrows=2, ncols=2)
+    [a.axis('off') for a in axs.flat]
 
-    axis[0].axis("off")
-    axis[0].imshow(img_eroded)
 
-    axis[1].axis("off")
-    axis[1].imshow(img)
-
-    axis[2].axis("off")
-    axis[2].imshow(img)
+    axs[0, 1].imshow(se)
+    axs[0, 0].imshow(img)
+    axs[1, 0].imshow(img_eroded)
+    axs[1, 1].imshow(img_dilated)
 
     plt.show()

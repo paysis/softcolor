@@ -106,14 +106,14 @@ class BaseMorphology:
 class MorphologyInCIELab(BaseMorphology):
 
     def dilation(self, image_as_rgb, structuring_element):
-        lab_image = color.rgb2lab(image_as_rgb)
+        lab_image = color.rgb2lab(image_as_rgb)/100.0
         lab_dilation = super().dilation(multivariate_image=lab_image,
                                         structuring_element=structuring_element)
-        return color.lab2rgb(lab_dilation)
+        return color.lab2rgb(lab_dilation*100.0)
 
     def erosion(self, image_as_rgb, structuring_element):
-        lab_image = color.rgb2lab(image_as_rgb)
+        lab_image = color.rgb2lab(image_as_rgb)/100.0
         lab_erosion = super().erosion(multivariate_image=lab_image,
                                       structuring_element=structuring_element)
-        return color.lab2rgb(lab_erosion)
+        return color.lab2rgb(lab_erosion*100.0)
 
