@@ -107,15 +107,13 @@ class MorphologyInCIELab(BaseMorphology):
 
     def dilation(self, image_as_rgb, structuring_element):
         lab_image = color.rgb2lab(image_as_rgb)
-        lab_dilation = soft_color_dilation(multivariate_image=lab_image,
-                                           structuring_element=structuring_element,
-                                           fuzzy_conjunction=self.conj)
+        lab_dilation = super().dilation(multivariate_image=lab_image,
+                                        structuring_element=structuring_element)
         return color.lab2rgb(lab_dilation)
 
     def erosion(self, image_as_rgb, structuring_element):
         lab_image = color.rgb2lab(image_as_rgb)
-        lab_erosion = soft_color_erosion(multivariate_image=lab_image,
-                                         structuring_element=structuring_element,
-                                         fuzzy_implication_function=self.impl)
+        lab_erosion = super().erosion(multivariate_image=lab_image,
+                                      structuring_element=structuring_element)
         return color.lab2rgb(lab_erosion)
 
