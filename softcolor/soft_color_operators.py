@@ -49,8 +49,9 @@ def soft_color_erosion(multivariate_image, structuring_element, fuzzy_implicatio
                 # Modify ony idcs being True (that were thus passed on to tie resolution)
                 optm_idcs_criteria_1[optm_idcs_criteria_1] = optm_idcs_criteria_2
 
-            sel_idcs = np.where(optm_idcs_criteria_1)
+            sel_idcs = np.where(optm_idcs_criteria_1)[0]
             sel_i, sel_j = np.unravel_index(sel_idcs[0], im_values.shape[:2])
+            assert multivariate_image[i, j, 0] < computed_values[sel_i, sel_j, 0]
             eroded_image[i, j, :] = computed_values[sel_i, sel_j, :]
 
 
