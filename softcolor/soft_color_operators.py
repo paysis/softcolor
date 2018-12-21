@@ -1,6 +1,8 @@
+from numba import jit
 import numpy as np
 
 
+# @jit(nopython=True)
 def soft_color_erosion(multivariate_image, structuring_element, fuzzy_implication_function):
     num_channels = multivariate_image.shape[2]
     sz_im = multivariate_image.shape[:2]

@@ -1,9 +1,9 @@
 import cv2
 import numpy as np
 
-from aggregation_functions import conjunction_min, r_implication, implication_godel
-from distance_between_images import euclidean_distance
-from soft_color_operators import soft_color_erosion, soft_color_dilation
+from softcolor.aggregation_functions import conjunction_min, r_implication, implication_godel
+from softcolor.distance_between_images import euclidean_distance
+from softcolor.soft_color_operators import soft_color_erosion, soft_color_dilation
 
 
 class BaseMorphology:
