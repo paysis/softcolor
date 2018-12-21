@@ -26,8 +26,8 @@ def soft_color_erosion(multivariate_image, structuring_element, fuzzy_implicatio
             se_ini_j = max(0, se_before_center_excluded[1]-j)
             se_end_j = min(sz_se[1], se_after_center_excluded[1]-j+sz_im[1])
 
-            im_values = multivariate_image[im_ini_i:im_end_i, im_ini_j:im_end_j, :]
-            se_values = structuring_element[se_ini_i:se_end_i, se_ini_j:se_end_j]
+            im_values = multivariate_image[im_ini_i:im_end_i, im_ini_j:im_end_j, :].copy()
+            se_values = structuring_element[se_ini_i:se_end_i, se_ini_j:se_end_j].copy()
 
             computed_values = np.concatenate((fuzzy_implication_function(se_values, im_values[:, :, 0])[:, :, np.newaxis], im_values[:, :, 1:]), axis=2)
             computed_values_flattened = computed_values.reshape((-1, num_channels))
@@ -51,7 +51,6 @@ def soft_color_erosion(multivariate_image, structuring_element, fuzzy_implicatio
 
             sel_idcs = np.where(optm_idcs_criteria_1)[0]
             sel_i, sel_j = np.unravel_index(sel_idcs[0], im_values.shape[:2])
-            assert multivariate_image[i, j, 0] < computed_values[sel_i, sel_j, 0]
             eroded_image[i, j, :] = computed_values[sel_i, sel_j, :]
 
 

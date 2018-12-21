@@ -109,11 +109,35 @@ class MorphologyInCIELab(BaseMorphology):
         lab_image = color.rgb2lab(image_as_rgb)/100.0
         lab_dilation = super().dilation(multivariate_image=lab_image,
                                         structuring_element=structuring_element)
-        return color.lab2rgb(lab_dilation*100.0)
+        rgb_dilation = color.lab2rgb(lab_dilation*100.0)
+        return _change_range(rgb_dilation, image_as_rgb.dtype)
 
     def erosion(self, image_as_rgb, structuring_element):
-        lab_image = color.rgb2lab(image_as_rgb)/100.0
-        lab_erosion = super().erosion(multivariate_image=lab_image,
-                                      structuring_element=structuring_element)
-        return color.lab2rgb(lab_erosion*100.0)
+        # lab_image = color.rgb2lab(image_as_rgb)/100.0
+        # lab_erosion = super().erosion(multivariate_image=lab_image,
+        #                               structuring_element=structuring_element)
+        # assert np.all( lab_erosion[:, :, 0] <= lab_image[:, :, 0] )
+        # rgb_erosion = color.lab2rgb(lab_image*100.0)
+        # return _change_range(rgb_erosion, image_as_rgb.dtype)
+        lab_image = color.rgb2lab(image_as_rgb)
+        lab_image_unitary = lab_image/100.0
+        lab_erosion_unitary = super().erosion(multivariate_image=lab_image_unitary,
+                                              structuring_element=structuring_element)
+        lab_erosion = lab_erosion_unitary * 100.0
+        rgb_erosion = color.lab2rgb(lab_erosion)
+        return rgb_erosion
+
+
+def _change_range(image, desired_dtype):
+    assert image.dtype == 'float'
+    if desired_dtype == 'uint8':
+        image *= 255
+    elif desired_dtype == 'float64':
+        pass
+    else:
+        # TODO: finish this.
+        raise AttributeError('Unknown desired_dtype: {}'.format(desired_dtype))
+    return image.astype(desired_dtype)
+
+
 
