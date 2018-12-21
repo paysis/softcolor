@@ -1,0 +1,6 @@
+
+* Speed up erosion:
+    * Batch processing: Parallelize with padded image, vectorize when possible.
+    * Call Aggregation function only with unique values.
+    * Numba for submethods?
+* Implement soft_color_dilation.
