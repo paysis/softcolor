@@ -37,16 +37,28 @@ def soft_color_erosion(multivariate_image, structuring_element, fuzzy_implicatio
             if optm_idcs_criteria_1.size != 1:
                 d_center_flattened = se_distances_wrt_center[se_ini_i:se_end_i, se_ini_j:se_end_j].flatten()
 
-                computed_values_flattened = computed_values_flattened[optm_idcs_criteria_1, :]
                 d_center_flattened = d_center_flattened[optm_idcs_criteria_1]
 
                 optimal_distance = np.min(d_center_flattened, axis=0)
                 optm_idcs_criteria_2 = (d_center_flattened == optimal_distance)
                 if optm_idcs_criteria_2.size != 1:
-                    # TODO: finish by implementing tie resolving based on lexicographical order
-                    pass
+                    computed_values_flattened = computed_values_flattened[optm_idcs_criteria_1, :]
+                    computed_values_flattened = computed_values_flattened[optm_idcs_criteria_2, :]
 
-                # Modify ony idcs being True (that were thus passed on to tie resolution)
+                    best_idx = 0
+                    best_value = computed_values_flattened[best_idx, :]
+                    for current_idx in range(1, computed_values_flattened.shape[0]):
+                        current_value = computed_values_flattened[current_idx, :]
+                        idcs_nonmatching_element = np.where(best_value != current_value)[0]
+                        if len(idcs_nonmatching_element) != 0 and current_value[idcs_nonmatching_element[0]] < best_value[idcs_nonmatching_element[0]]:
+                            best_idx = current_idx
+                            best_value = current_value
+
+                    # Select only best_idx
+                    optm_idcs_criteria_2[:] = False
+                    optm_idcs_criteria_2[best_idx] = True
+
+                # Modify ony idcs being True (the ones on tie resolution)
                 optm_idcs_criteria_1[optm_idcs_criteria_1] = optm_idcs_criteria_2
 
             sel_idcs = np.where(optm_idcs_criteria_1)[0]
