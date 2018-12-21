@@ -2,103 +2,93 @@ import numpy as np
 
 
 def soft_color_erosion(multivariate_image, structuring_element, fuzzy_implication_function):
+    eroded_image = np.empty(shape=multivariate_image.shape, dtype=multivariate_image.dtype)
     padded_image = _pad_image_wrt_structuring_element(multivariate_image=multivariate_image,
                                                       structuring_element=structuring_element)
-    return _base_soft_color_operator(
-        padded_image=padded_image,
-        structuring_element=structuring_element,
-        se_distances_wrt_center=_euclidean_distance_wrt_center(structuring_element.shape),
-        aggregation_function=PrecomputeAggregationFunction(
-            first_channel=padded_image[:, :, 0],
+    for limit_i in range(0, multivariate_image.shape[0], 100):
+        _base_soft_color_operator(
+            padded_image=padded_image,
             structuring_element=structuring_element,
-            aggregation_function=fuzzy_implication_function),
-        order_criteria_1=np.min,
-        order_criteria_3=np.minimum,
-    )
+            se_distances_wrt_center=_euclidean_distance_wrt_center(structuring_element.shape),
+            aggregation_function=fuzzy_implication_function,
+            order_criteria_1=np.min,
+            order_criteria_3=np.minimum,
+            output=eroded_image,
+            range_i=[limit_i, limit_i+100],
+            range_j=[0, multivariate_image.shape[1]],
+        )
+    return eroded_image
 
 
 def soft_color_dilation(multivariate_image, structuring_element, fuzzy_conjunction):
-    return _base_soft_color_operator(
-        padded_image=_pad_image_wrt_structuring_element(multivariate_image=multivariate_image,
-                                                        structuring_element=structuring_element),
-        structuring_element=structuring_element,
-        se_distances_wrt_center=_euclidean_distance_wrt_center(structuring_element.shape),
-        aggregation_function=fuzzy_conjunction,
-        order_criteria_1=np.max,
-        order_criteria_3=np.max,
-    )
+    return None
 
 
 def _base_soft_color_operator(padded_image, structuring_element, se_distances_wrt_center, aggregation_function,
-                              order_criteria_1, order_criteria_3):
+                              order_criteria_1, order_criteria_3, output, range_i, range_j):
     num_channels = padded_image.shape[2]
     sz_se, se_center_idcs, se_before_center, se_after_center = _sizes_wrt_center(structuring_element.shape)
     pad_i, pad_j = _pad_size_wrt_structuring_element(structuring_element=structuring_element)
     sz_result = (padded_image.shape[0] - pad_i[0] - pad_i[1],
                  padded_image.shape[1] - pad_j[0] - pad_j[1])
+    se_before_center_included = [e+1 for e in se_before_center]
     se_after_center_included = [e+1 for e in se_after_center]
-    eroded_image = np.zeros(shape=sz_result+(num_channels, ))
-    for i in range(pad_i[0], padded_image.shape[0] - pad_i[1]):
-        im_ini_i = i-se_before_center[0]
-        im_end_i = i+se_after_center_included[0]
 
-        for j in range(pad_j[0], padded_image.shape[1] - pad_j[1]):
-            im_ini_j = j-se_before_center[1]
-            im_end_j = j+se_after_center_included[1]
+    # TODO: make more efficient with less calls to aggregation function (only those values in unique_se)
+    range_i[1] = min(range_i[1], output.shape[0])
+    range_j[1] = min(range_j[1], output.shape[0])
+    num_i = range_i[1] - range_i[0]
+    num_j = range_j[1] - range_j[0]
+    values = np.empty(shape=(num_i, num_j, sz_se[0] * sz_se[1]), dtype=output.dtype)
+    for idx_i_se in range(sz_se[0]):
+        for idx_j_se in range(sz_se[0]):
+            cropped_first_channel = padded_image[
+                range_i[0]-idx_i_se+sz_se[0]-1:range_i[1]-idx_i_se+sz_se[0]-1,
+                range_j[0]-idx_j_se+sz_se[1]-1:range_j[1]-idx_j_se+sz_se[1]-1,
+                0]
+            values[:, :, idx_i_se*sz_se[1] + idx_j_se] = aggregation_function(
+                np.full(shape=(num_i, num_j),
+                        fill_value=structuring_element[idx_i_se, idx_j_se],
+                        dtype=structuring_element.dtype),
+                cropped_first_channel.copy(),
+            )
 
-            im_cropped = padded_image[im_ini_i:im_end_i, im_ini_j:im_end_j, :]
-            im_values = im_cropped.reshape((-1, num_channels))
-            #  Compute aggregation function
-            computed_first_channel = aggregation_function(i, j).ravel()
+    selected_flattened_se_idx = np.argmin(values, axis=2)
+    grid_val_j, grid_val_i = np.meshgrid(np.arange(values.shape[1]), np.arange(values.shape[0]))
+    aggregated_first_channel = values[grid_val_i,
+                                      grid_val_j,
+                                      selected_flattened_se_idx]   # TODO: try to compute it from selected_idcs!
+    idcs_tied_3d = np.equal(values[:, :, :], np.tile(aggregated_first_channel[:, :, np.newaxis], reps=(1, 1, sz_se[0]*sz_se[1])))
 
-            # Avoid NANs
-            idcs_nonnan = ~np.isnan(computed_first_channel)
-            if not np.any(idcs_nonnan):
-                eroded_image[i-pad_i[0], j-pad_j[0], :] = np.nan
+    mask_tie = np.sum(idcs_tied_3d, axis=2) == 2
+    idx_tie_i, idx_tie_j = np.where(mask_tie)
+    for res_i, res_j in zip(idx_tie_i, idx_tie_j):
+        pad_ini_i = res_i+range_i[0]+se_before_center[0]-se_before_center[0]
+        pad_end_i = res_i+range_i[0]+se_after_center[0]+se_after_center_included[0]
+        pad_ini_j = res_j+range_j[0]+se_before_center[1]-se_before_center[1]
+        pad_end_j = res_j+range_j[0]+se_after_center[1]+se_after_center_included[1]
+        idcs_se_tied = np.where(idcs_tied_3d[res_i, res_j, :])[0]
 
-            else:
-                # Order wrt criteria 1 (first-channel value)
-                computed_values = np.concatenate((computed_first_channel[idcs_nonnan, np.newaxis], im_values[idcs_nonnan, 1:]),
-                                                 axis=1)
-                remaining_values = computed_values[:, :]  # Create another view
+        compound_data = np.concatenate((+se_distances_wrt_center[:, :, np.newaxis],
+                                        padded_image[pad_ini_i:pad_end_i, pad_ini_j:pad_end_j, 1:]),
+                                       axis=2)
+        compound_data = compound_data.reshape((-1, num_channels))   # num_channels - 1 (first_channel) + 1 (d_se)
+        compound_data = compound_data[idcs_se_tied, :]
+        best_idx = _lexicographical_argmin(compound_data)
+        best_idx = idcs_se_tied[best_idx]
+        selected_flattened_se_idx[res_i, res_j] = best_idx
 
-                optm_value = order_criteria_1(remaining_values[:, 0], axis=0)
-                optm_idcs_criteria_1 = np.equal(remaining_values[:, 0], optm_value)
-                if optm_idcs_criteria_1.size > 1:
-                    # Resolve ties wrt criteria 2 (closest from center)
-                    d_center_flattened = se_distances_wrt_center.flatten()
+    relative_delta_i, relative_delta_j = np.unravel_index(selected_flattened_se_idx, dims=sz_se)
+    grid_out_i = grid_val_i + range_i[0]
+    grid_out_j = grid_val_j + range_j[0]
+    grid_pad_i = grid_out_i + se_before_center[0] + relative_delta_i
+    grid_pad_j = grid_out_j + se_before_center[1] + relative_delta_j
 
-                    d_center_flattened = d_center_flattened[idcs_nonnan]
-                    d_center_flattened = d_center_flattened[optm_idcs_criteria_1]
-
-                    optimal_distance = np.min(d_center_flattened, axis=0)
-                    optm_idcs_criteria_2 = (d_center_flattened == optimal_distance)
-                    if optm_idcs_criteria_2.size != 1:
-                        # Resolve ties wrt criteria 3 (lexicographical order)
-                        remaining_values = remaining_values[optm_idcs_criteria_1, :]
-                        remaining_values = remaining_values[optm_idcs_criteria_2, :]
-
-                        best_idx = 0
-                        best_value = remaining_values[best_idx, :]
-                        for current_idx in range(1, remaining_values.shape[0]):
-                            current_value = remaining_values[current_idx, :]
-                            idcs_nonmatching_element = np.where(best_value != current_value)[0]
-                            if len(idcs_nonmatching_element) != 0 and order_criteria_3(
-                                    current_value[idcs_nonmatching_element[0]],
-                                    best_value[idcs_nonmatching_element[0]]):
-                                best_idx = current_idx
-                                best_value = current_value
-
-                        # Select only best_idx
-                        optm_idcs_criteria_2[:] = False
-                        optm_idcs_criteria_2[best_idx] = True
-
-                    # Modify only idcs being True (the ones on tie resolution)
-                    optm_idcs_criteria_1[optm_idcs_criteria_1] = optm_idcs_criteria_2
-
-                sel_idcs = np.where(optm_idcs_criteria_1)[0]
-                eroded_image[i-pad_i[0], j-pad_j[0], :] = computed_values[sel_idcs[0], :]
-    return eroded_image
+    # TODO: add other channels as well
+    output[grid_val_i, grid_val_j, 0] = aggregated_first_channel
+    for idx_channel in range(1, num_channels):
+        output[grid_out_i, grid_out_j, idx_channel] = padded_image[grid_pad_i, grid_pad_j, idx_channel]
+    return output
 
 
 def _euclidean_distance_wrt_center(spatial_shape):
@@ -131,6 +121,20 @@ def _pad_image_wrt_structuring_element(multivariate_image, structuring_element):
     return padded_image
 
 
+def _lexicographical_argmin(data):
+    # Data must be two-dimensional, being the first axis the one to be sorted
+    # Returns a numeric index
+    if data.shape[1] == 1:
+        return np.argmin(data[:, 0])
+    min_value = np.nanmin(data[:, 0])
+    if np.isnan(min_value):   # TODO: This should not be necessary!
+        return 0
+    idcs_min = np.where(data[:, 0] == min_value)[0]
+    if idcs_min.size == 1:
+        return idcs_min[0]
+    return idcs_min[_lexicographical_argmin(data[idcs_min, 1:])]
+
+
 class PrecomputeAggregationFunction:
     def __init__(self, first_channel, structuring_element, aggregation_function):
         self.first_channel = first_channel
@@ -149,7 +153,8 @@ class PrecomputeAggregationFunction:
             # TODO: review that this limit is reasonable.
             self.values = np.full(shape=(self.first_channel.shape[0],
                                          self.first_channel.shape[1],
-                                         self.unique_se_values.size),
+                                         self.structuring_element.shape[0],
+                                         self.structuring_element.shape[1]),
                                   fill_value=np.nan,
                                   dtype='float16')
             self.delta_i = self.end_delta[0] + self.ini_delta[0]
