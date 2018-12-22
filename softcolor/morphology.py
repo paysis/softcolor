@@ -1,5 +1,10 @@
+from math import ceil
+from warnings import warn
+
+from scipy.ndimage.filters import convolve
 from skimage import color
 import numpy as np
+from skimage.morphology import disk
 
 from softcolor.aggregation_functions import conjunction_min, r_implication, implication_godel
 from softcolor.distance_between_images import euclidean_distance
@@ -84,7 +89,6 @@ class BaseMorphology:
             idx_it += 1
         return inpainted_image
 
-
     def contrast_mapping(self, multivariate_image, structuring_element, num_iterations=10):
         """ Iteratively change pixels as the most similar one between their dilation and their erosion. """
         contrasted_image = multivariate_image
@@ -108,36 +112,47 @@ class MorphologyInCIELab(BaseMorphology):
     def dilation(self, image_as_rgb, structuring_element):
         lab_image = color.rgb2lab(image_as_rgb)/100.0
         lab_dilation = super().dilation(multivariate_image=lab_image,
-                                        structuring_element=structuring_element)
-        rgb_dilation = color.lab2rgb(lab_dilation*100.0)
-        return _change_range(rgb_dilation, image_as_rgb.dtype)
+                                        structuring_element=structuring_element) * 100.0
+        return color.lab2rgb(lab_dilation)
 
     def erosion(self, image_as_rgb, structuring_element):
-        # lab_image = color.rgb2lab(image_as_rgb)/100.0
-        # lab_erosion = super().erosion(multivariate_image=lab_image,
-        #                               structuring_element=structuring_element)
-        # assert np.all( lab_erosion[:, :, 0] <= lab_image[:, :, 0] )
-        # rgb_erosion = color.lab2rgb(lab_image*100.0)
-        # return _change_range(rgb_erosion, image_as_rgb.dtype)
-        lab_image = color.rgb2lab(image_as_rgb)
-        lab_image_unitary = lab_image/100.0
-        lab_erosion_unitary = super().erosion(multivariate_image=lab_image_unitary,
-                                              structuring_element=structuring_element)
-        lab_erosion = lab_erosion_unitary * 100.0
-        rgb_erosion = color.lab2rgb(lab_erosion)
-        return rgb_erosion
+        lab_image = color.rgb2lab(image_as_rgb)/100.0
+        lab_erosion = super().erosion(multivariate_image=lab_image,
+                                      structuring_element=structuring_element) * 100.0
+        return color.lab2rgb(lab_erosion)
 
 
-def _change_range(image, desired_dtype):
-    assert image.dtype == 'float'
-    if desired_dtype == 'uint8':
-        image *= 255
-    elif desired_dtype == 'float64':
-        pass
+def soften_structuring_element(structuring_element, sz_averaging_kernel_in_px=None, preserve_shape=True):
+    if sz_averaging_kernel_in_px is not None:
+        pad_px = sz_averaging_kernel_in_px//2
     else:
-        # TODO: finish this.
-        raise AttributeError('Unknown desired_dtype: {}'.format(desired_dtype))
-    return image.astype(desired_dtype)
+        pad_px = ceil(sum(structuring_element.shape)/10)
+        pad_px = max(1, pad_px)
+
+    if np.all(structuring_element <= 1):
+        structuring_element = structuring_element.astype('float32')
+
+    se_padded = np.pad(structuring_element,
+                       pad_width=((pad_px, pad_px), (pad_px, pad_px)),
+                       mode='constant', constant_values=0)
+
+    kernel = disk(pad_px)
+    kernel = convolve(input=kernel, weights=kernel, mode='constant', cval=0.0)
+    kernel = kernel/np.sum(kernel)
+    se_soft = convolve(input=se_padded, weights=kernel, mode='constant', cval=0.0)
+
+    se_orig_center = tuple(e//2 for e in structuring_element.shape)
+    se_soft_center = tuple(e//2 for e in se_soft.shape)
+    if structuring_element[se_orig_center] == 1 and se_soft[se_soft_center] != 1:
+        msg = ("""
+        The original Structuring Element had a center equal to 1, but the softened one does not.
+        This may produce unexpected behaviours.""")
+        warn(RuntimeWarning(msg))
+
+    if preserve_shape:
+        se_soft = se_soft[pad_px:-pad_px, pad_px:-pad_px]
+
+    return se_soft
 
 
 
