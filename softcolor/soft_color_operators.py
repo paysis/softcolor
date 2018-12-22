@@ -29,35 +29,49 @@ def _base_soft_color_operator(padded_image, structuring_element, se_distances_wr
     num_channels = padded_image.shape[2]
     sz_se, se_center_idcs, se_before_center, se_after_center = _sizes_wrt_center(structuring_element.shape)
     pad_i, pad_j = _pad_size_wrt_structuring_element(structuring_element=structuring_element)
-    sz_result = (padded_image.shape[0] - pad_i[0] - pad_i[1],
-                 padded_image.shape[1] - pad_j[0] - pad_j[1])
-    se_before_center_included = [e+1 for e in se_before_center]
     se_after_center_included = [e+1 for e in se_after_center]
 
-    # TODO: make more efficient with less calls to aggregation function (only those values in unique_se)
     range_i[1] = min(range_i[1], output.shape[0])
     range_j[1] = min(range_j[1], output.shape[0])
     num_i = range_i[1] - range_i[0]
     num_j = range_j[1] - range_j[0]
+
+    # Precompute AggregationFunction(ImageWithOffset, SE_uniqueValues)
+    se_uniques, se_unique_to_idx, se_idx_to_unique = np.unique(structuring_element,
+                                                               return_index=True, return_inverse=True)
+    precomputed_unique_se = np.empty(shape=(num_i+pad_i[0]+pad_i[1],
+                                            num_j+pad_j[0]+pad_j[1],
+                                            se_uniques.size),
+                                     dtype=output.dtype)
+    for idx_unique in range(se_uniques.size):
+        idx_se_flat = se_unique_to_idx[idx_unique]
+        idx_i_se, idx_j_se = np.unravel_index(idx_se_flat, dims=sz_se)
+        cropped_first_channel = padded_image[
+            range_i[0]:range_i[1]+se_before_center[0]+se_after_center[0],
+            range_j[0]:range_j[1]+se_before_center[0]+se_after_center[1],
+            0].copy()
+        mask_nans = np.isnan(cropped_first_channel)
+        cropped_first_channel[~mask_nans] = aggregation_function(
+            np.full(shape=(np.count_nonzero(~mask_nans), ),
+                    fill_value=structuring_element[idx_i_se, idx_j_se],
+                    dtype=structuring_element.dtype),
+            cropped_first_channel[~mask_nans],
+        )
+        precomputed_unique_se[:, :, idx_unique] = cropped_first_channel
+
     values = np.empty(shape=(num_i, num_j, sz_se[0] * sz_se[1]), dtype=output.dtype)
     for idx_i_se in range(sz_se[0]):
         for idx_j_se in range(sz_se[0]):
-            cropped_first_channel = padded_image[
-                range_i[0]-idx_i_se+sz_se[0]-1:range_i[1]-idx_i_se+sz_se[0]-1,
-                range_j[0]-idx_j_se+sz_se[1]-1:range_j[1]-idx_j_se+sz_se[1]-1,
-                0]
-            values[:, :, idx_i_se*sz_se[1] + idx_j_se] = aggregation_function(
-                np.full(shape=(num_i, num_j),
-                        fill_value=structuring_element[idx_i_se, idx_j_se],
-                        dtype=structuring_element.dtype),
-                cropped_first_channel.copy(),
-            )
+            idx_se_flat = np.ravel_multi_index((idx_i_se, idx_j_se), dims=sz_se)
+            idx_unique = se_idx_to_unique[idx_se_flat]
+            values[:, :, idx_se_flat] = precomputed_unique_se[
+                idx_i_se:num_i + idx_i_se,
+                idx_j_se:num_j + idx_j_se,
+                idx_unique]
 
-    selected_flattened_se_idx = np.argmin(values, axis=2)
+    selected_flattened_se_idx = np.nanargmin(values, axis=2)
     grid_val_j, grid_val_i = np.meshgrid(np.arange(values.shape[1]), np.arange(values.shape[0]))
-    aggregated_first_channel = values[grid_val_i,
-                                      grid_val_j,
-                                      selected_flattened_se_idx]   # TODO: try to compute it from selected_idcs!
+    aggregated_first_channel = values[grid_val_i, grid_val_j, selected_flattened_se_idx]
     idcs_tied_3d = np.equal(values[:, :, :], np.tile(aggregated_first_channel[:, :, np.newaxis], reps=(1, 1, sz_se[0]*sz_se[1])))
 
     mask_tie = np.sum(idcs_tied_3d, axis=2) == 2
@@ -81,11 +95,11 @@ def _base_soft_color_operator(padded_image, structuring_element, se_distances_wr
     relative_delta_i, relative_delta_j = np.unravel_index(selected_flattened_se_idx, dims=sz_se)
     grid_out_i = grid_val_i + range_i[0]
     grid_out_j = grid_val_j + range_j[0]
-    grid_pad_i = grid_out_i + se_before_center[0] + relative_delta_i
-    grid_pad_j = grid_out_j + se_before_center[1] + relative_delta_j
+    grid_pad_i = grid_out_i + relative_delta_i
+    grid_pad_j = grid_out_j + relative_delta_j
 
-    # TODO: add other channels as well
-    output[grid_val_i, grid_val_j, 0] = aggregated_first_channel
+    assert np.all(np.equal(aggregated_first_channel, padded_image[grid_pad_i, grid_pad_j, 0]))
+    output[grid_out_i, grid_out_j, 0] = aggregated_first_channel
     for idx_channel in range(1, num_channels):
         output[grid_out_i, grid_out_j, idx_channel] = padded_image[grid_pad_i, grid_pad_j, idx_channel]
     return output

@@ -8,7 +8,7 @@ if __name__ == "__main__":
     img = io.imread('images/lena-512.gif')
 
     morphology = MorphologyInCIELab()
-    se = disk(3)
+    se = disk(4)
     img_eroded = morphology.erosion(img, structuring_element=se)
     # img_dilated = morphology.dilation(img, structuring_element=se)
 
