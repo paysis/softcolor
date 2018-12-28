@@ -5,8 +5,4 @@
 
 * Add logging
 
-* Fix examples:
-    * Fix behaviour of contrast mapping.
-    * Test TH.
-
 * Upload to Pip.
