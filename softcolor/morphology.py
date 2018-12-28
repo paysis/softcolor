@@ -13,7 +13,9 @@ from softcolor.soft_color_operators import soft_color_erosion, soft_color_dilati
 
 class BaseMorphology:
 
-    def __init__(self, conjunction=None, fuzzy_implication_function=None, distance_images=euclidean_distance):
+    def __init__(self, conjunction=None, fuzzy_implication_function=None,
+                 distance_multivariate_images=euclidean_distance,
+                 combine_multivariate_images=lambda x, y: 0.5*(x+y)):
         if conjunction is None:
             conjunction = conjunction_min
         self.conj = conjunction
@@ -23,7 +25,8 @@ class BaseMorphology:
             except AttributeError:
                 fuzzy_implication_function = implication_godel
         self.impl = fuzzy_implication_function
-        self.dist = distance_images
+        self.dist = distance_multivariate_images
+        self.combine = combine_multivariate_images
 
     def dilation(self, multivariate_image, structuring_element):
         return soft_color_dilation(multivariate_image=multivariate_image,
@@ -79,6 +82,7 @@ class BaseMorphology:
             elements that only contain 1 or np.nan."""
             warn(msg)
         inpainted_image = multivariate_image.copy()
+        num_channels = multivariate_image.shape[2]
         steps = [inpainted_image.copy()]
         mask_unknown = np.isnan(inpainted_image[:, :, 0])
         idx_it = 0
@@ -90,8 +94,9 @@ class BaseMorphology:
             mask_recovered = mask_unknown & ~np.isnan(closing[:, :, 0]) & ~np.isnan(opening[:, :, 0])
             if not np.any(mask_recovered):
                 break
-            mask_recovered = np.tile(mask_recovered[:, :, np.newaxis], (1, 1, 3))
-            inpainted_image[mask_recovered] = 0.5 * (closing[mask_recovered] + opening[mask_recovered])
+            x = closing[mask_recovered, :].reshape(-1, 1, num_channels)
+            y = opening[mask_recovered, :].reshape(-1, 1, num_channels)
+            inpainted_image[mask_recovered] = self.combine(x, y).reshape(-1, num_channels)
             mask_unknown = np.isnan(inpainted_image[:, :, 0])
             idx_it += 1
             steps += [inpainted_image.copy()]
@@ -118,8 +123,8 @@ class BaseMorphology:
             d_erosion = self.dist(contrasted_image, erosion)
             mask_dilation_is_closest = d_dilation < d_erosion
             mask_dilation_is_closest = np.tile(mask_dilation_is_closest[:, :, np.newaxis], (1, 1, 3))
+            contrasted_image = erosion
             contrasted_image[mask_dilation_is_closest] = dilation[mask_dilation_is_closest]
-            contrasted_image[~mask_dilation_is_closest] = erosion[~mask_dilation_is_closest]
             idx_it += 1
             steps += [contrasted_image.copy()]
         return contrasted_image, steps
@@ -135,6 +140,11 @@ class BaseMorphology:
 
 
 class MorphologyInCIELab(BaseMorphology):
+
+    def __init__(self, conjunction=None, fuzzy_implication_function=None):
+        super().__init__(conjunction=conjunction, fuzzy_implication_function=fuzzy_implication_function,
+                         distance_multivariate_images=_perceptual_distance,
+                         combine_multivariate_images=_combine_in_lab)
 
     def dilation(self, image_as_rgb, structuring_element):
         lab_image = _rgb_to_lab(image_as_rgb)/100.0
@@ -173,6 +183,17 @@ def _lab_to_rgb(image_as_lab):
     return rgb
 
 
+def _perceptual_distance(x_as_rgb, y_as_rgb):
+    return euclidean_distance(
+        x=_rgb_to_lab(x_as_rgb),
+        y=_rgb_to_lab(y_as_rgb),
+    )
+
+
+def _combine_in_lab(x_as_rgb, y_as_rgb):
+    return _lab_to_rgb(0.5 * (_rgb_to_lab(x_as_rgb) + _rgb_to_lab(y_as_rgb)))
+
+
 def soften_structuring_element(structuring_element, sz_averaging_kernel_in_px=None, preserve_shape=True):
     if sz_averaging_kernel_in_px is not None:
         pad_px = sz_averaging_kernel_in_px//2
@@ -204,6 +225,3 @@ def soften_structuring_element(structuring_element, sz_averaging_kernel_in_px=No
         se_soft = se_soft[pad_px:-pad_px, pad_px:-pad_px]
 
     return se_soft
-
-
-

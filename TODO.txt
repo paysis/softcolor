@@ -1,6 +1,4 @@
 
-* Use masked arrays for the implementation of NaN-allowed morphology.
-
 * Add tests:
     * Very simple behaviour (1-d images, bi-valued, non-bivalued).
     * Check equal result with pixel-wise implementation.

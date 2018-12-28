@@ -14,6 +14,7 @@ if __name__ == "__main__":
     morphology = MorphologyInCIELab()
     se = disk(3)
     se = soften_structuring_element(se)
+
     with Timer() as t:
         img_contrasted, img_contrasted_steps = morphology.contrast_mapping_with_steps(img,
                                                                                       structuring_element=se,
