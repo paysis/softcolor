@@ -100,16 +100,16 @@ class BaseMorphology:
 
     def contrast_mapping_with_steps(self, multivariate_image, structuring_element, num_iterations=3):
         """ Iteratively change pixels as the most similar one between their dilation and their erosion. """
-        contrasted_image = multivariate_image
+        contrasted_image = multivariate_image.copy()
         idx_it = 0
         steps = [contrasted_image.copy()]
         while idx_it <= num_iterations:
-            dilation = self.dilation(multivariate_image,
+            dilation = self.dilation(contrasted_image,
                                      structuring_element=structuring_element)
-            erosion = self.erosion(multivariate_image,
+            erosion = self.erosion(contrasted_image,
                                    structuring_element=structuring_element)
-            d_dilation = self.dist(multivariate_image, dilation)
-            d_erosion = self.dist(multivariate_image, erosion)
+            d_dilation = self.dist(contrasted_image, dilation)
+            d_erosion = self.dist(contrasted_image, erosion)
             mask_dilation_is_closest = d_dilation < d_erosion
             mask_dilation_is_closest = np.tile(mask_dilation_is_closest[:, :, np.newaxis], (1, 1, 3))
             contrasted_image[mask_dilation_is_closest] = dilation[mask_dilation_is_closest]

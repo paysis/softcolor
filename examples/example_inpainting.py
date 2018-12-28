@@ -8,6 +8,16 @@ from skimage.morphology import disk
 from examples.utils import Timer
 from softcolor.morphology import MorphologyInCIELab, soften_structuring_element
 
+
+def _replace_nans_with_white(image_as_rgb):
+    nan_mask = np.isnan(image_as_rgb[:, :, 0])
+    img_result = np.ones_like(image_as_rgb)
+    for idx_c in range(image_as_rgb.shape[2]):
+        channel = image_as_rgb[:, :, idx_c]
+        channel[nan_mask] = 1
+        img_result[:, :, idx_c] = channel
+    return img_result
+
 if __name__ == "__main__":
     img = io.imread('images/lena-512.gif')
     img = img[100:200, 100:200, :]
@@ -32,14 +42,13 @@ if __name__ == "__main__":
 
     _, axs = plt.subplots(nrows=2, ncols=2)
     [a.axis('off') for a in axs.flat]
+    axs[0, 0].imshow(_replace_nans_with_white(img))
     axs[0, 1].imshow(se)
-    axs[0, 0].imshow(img)
     axs[1, 0].imshow(img_inpainted)
     plt.show()
 
     _, axs = plt.subplots(nrows=3, ncols=ceil(len(img_inpainted_steps)/3))
     [a.axis('off') for a in axs.flat]
     for idx_step, step in enumerate(img_inpainted_steps):
-        axs.flat[idx_step].imshow(step)
+        axs.flat[idx_step].imshow(_replace_nans_with_white(step))
     plt.show()
-

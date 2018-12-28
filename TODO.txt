@@ -1,6 +1,7 @@
 
-* Swallow warning when converting NaNs into CIELab.
 * Fix examples:
     * Fix plots.
     * Fix behaviour of inpaint/contrast mapping.
     * Test TH.
+
+* Upload to Pip.
