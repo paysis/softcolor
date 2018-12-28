@@ -18,12 +18,13 @@ def _replace_nans_with_white(image_as_rgb):
         img_result[:, :, idx_c] = channel
     return img_result
 
+
 if __name__ == "__main__":
     img = io.imread('images/lena-512.gif')
-    img = img[100:200, 100:200, :]
+    img = img[100:150, 100:150, :]
     img = img_as_float(img)
 
-    probability_forgetting_pixel = 0.5
+    probability_forgetting_pixel = 0.95
     nan_mask = np.random.choice([True, False], img.shape[:2],
                                 p=[probability_forgetting_pixel, 1 - probability_forgetting_pixel])
     for idx_c in range(img.shape[2]):
@@ -32,8 +33,7 @@ if __name__ == "__main__":
         img[:, :, idx_c] = channel
 
     morphology = MorphologyInCIELab()
-    se = disk(3)
-    se = soften_structuring_element(se)
+    se = disk(1)
     with Timer() as t:
         img_inpainted, img_inpainted_steps = morphology.inpaint_with_steps(img,
                                                                            structuring_element=se,

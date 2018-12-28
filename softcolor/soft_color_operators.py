@@ -26,7 +26,7 @@ def _base_soft_color_operator(multivariate_image, structuring_element,
                               flag_minimize_first_channel,
                               flag_minimize_euclidean_distance,
                               flag_minimize_lexicographical_order):
-    result_image = np.empty(shape=multivariate_image.shape, dtype=multivariate_image.dtype)
+    result_image = np.empty_like(multivariate_image)
     padded_image = _pad_image_wrt_structuring_element(multivariate_image=multivariate_image,
                                                       structuring_element=structuring_element)
     step = _compute_optimum_step(structuring_element)
@@ -74,18 +74,21 @@ def _base_soft_color_operator_limited_range(padded_image,
     for idx_unique in range(se_uniques.size):
         idx_se_flat = se_unique_to_idx[idx_unique]
         idx_i_se, idx_j_se = np.unravel_index(idx_se_flat, dims=sz_se)
-        cropped_first_channel = padded_image[
-            range_i[0]:range_i[1]+se_before_center[0]+se_after_center[0],
-            range_j[0]:range_j[1]+se_before_center[0]+se_after_center[1],
-            0].copy()
-        mask_nans = np.isnan(cropped_first_channel)
-        cropped_first_channel[~mask_nans] = aggregation_function(
-            np.full(shape=(np.count_nonzero(~mask_nans), ),
-                    fill_value=structuring_element[idx_i_se, idx_j_se],
-                    dtype=structuring_element.dtype),
-            cropped_first_channel[~mask_nans],
-        )
-        precomputed_unique_se[:, :, idx_unique] = cropped_first_channel
+        if np.isnan(structuring_element[idx_i_se, idx_j_se]):
+            precomputed_unique_se[:, :, idx_unique] = np.nan
+        else:
+            cropped_first_channel = padded_image[
+                range_i[0]:range_i[1]+se_before_center[0]+se_after_center[0],
+                range_j[0]:range_j[1]+se_before_center[0]+se_after_center[1],
+                0].copy()
+            mask_nans = np.isnan(cropped_first_channel)
+            cropped_first_channel[~mask_nans] = aggregation_function(
+                np.full(shape=(np.count_nonzero(~mask_nans), ),
+                        fill_value=structuring_element[idx_i_se, idx_j_se],
+                        dtype=structuring_element.dtype),
+                cropped_first_channel[~mask_nans],
+            )
+            precomputed_unique_se[:, :, idx_unique] = cropped_first_channel
 
     values = np.empty(shape=(num_i, num_j, sz_se[0] * sz_se[1]), dtype=output.dtype)
     for idx_i_se in range(sz_se[0]):
@@ -96,17 +99,28 @@ def _base_soft_color_operator_limited_range(padded_image,
                 idx_i_se:num_i + idx_i_se,
                 idx_j_se:num_j + idx_j_se,
                 idx_unique]
+    values_allnan_mask = np.all(np.isnan(values), axis=2)
+    if np.any(values_allnan_mask):
+        values_flat = values.reshape((-1, 1, values.shape[2]))
+        mask_flat = values_allnan_mask.reshape((-1, ))
+        idcs_flat = np.zeros(shape=values_flat.shape[:2], dtype='uint64')
+        if flag_minimize_first_channel:
+            idcs_flat[~mask_flat, :] = np.nanargmin(values_flat[~mask_flat, :, :], axis=2)
+        else:
+            idcs_flat[~mask_flat, :] = np.nanargmax(values_flat[~mask_flat, :, :], axis=2)
+        selected_se_idx = idcs_flat.reshape(num_i, num_j)
 
-    if flag_minimize_first_channel:
-        selected_flattened_se_idx = np.nanargmin(values, axis=2)
     else:
-        selected_flattened_se_idx = np.nanargmax(values, axis=2)
+        if flag_minimize_first_channel:
+            selected_se_idx = np.nanargmin(values, axis=2)
+        else:
+            selected_se_idx = np.nanargmax(values, axis=2)
     grid_val_j, grid_val_i = np.meshgrid(np.arange(values.shape[1]), np.arange(values.shape[0]))
-    aggregated_first_channel = values[grid_val_i, grid_val_j, selected_flattened_se_idx]
+    aggregated_first_channel = values[grid_val_i, grid_val_j, selected_se_idx]
     idcs_tied_3d = np.equal(values[:, :, :], aggregated_first_channel[:, :, np.newaxis])
 
     mask_tie = np.sum(idcs_tied_3d, axis=2) != 1
-    idx_tie_i, idx_tie_j = np.where(mask_tie)
+    idx_tie_i, idx_tie_j = np.where(mask_tie & ~values_allnan_mask)
     for res_i, res_j in zip(idx_tie_i, idx_tie_j):
         pad_ini_i = res_i+range_i[0]+se_before_center[0]-se_before_center[0]
         pad_end_i = res_i+range_i[0]+se_after_center[0]+se_after_center_included[0]
@@ -128,17 +142,20 @@ def _base_soft_color_operator_limited_range(padded_image,
         else:
             best_idx = _lexicographical_argmax(compound_data)
         best_idx = idcs_se_tied[best_idx]
-        selected_flattened_se_idx[res_i, res_j] = best_idx
+        selected_se_idx[res_i, res_j] = best_idx
 
-    relative_delta_i, relative_delta_j = np.unravel_index(selected_flattened_se_idx, dims=sz_se)
+    relative_delta_i, relative_delta_j = np.unravel_index(selected_se_idx, dims=sz_se)
     grid_out_i = grid_val_i + range_i[0]
     grid_out_j = grid_val_j + range_j[0]
     grid_pad_i = grid_out_i + relative_delta_i
     grid_pad_j = grid_out_j + relative_delta_j
 
+    aggregated_first_channel[values_allnan_mask] = np.nan
     output[grid_out_i, grid_out_j, 0] = aggregated_first_channel
     for idx_channel in range(1, num_channels):
-        output[grid_out_i, grid_out_j, idx_channel] = padded_image[grid_pad_i, grid_pad_j, idx_channel]
+        channel = padded_image[grid_pad_i, grid_pad_j, idx_channel]
+        channel[values_allnan_mask] = np.nan
+        output[grid_out_i, grid_out_j, idx_channel] = channel
     return output
 
 
