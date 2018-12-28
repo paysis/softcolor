@@ -37,16 +37,16 @@ class BaseMorphology:
 
     def opening(self, multivariate_image, structuring_element):
         return self.dilation(
-            multivariate_image=self.erosion(
-                multivariate_image=multivariate_image,
+            self.erosion(
+                multivariate_image,
                 structuring_element=structuring_element),
             structuring_element=structuring_element[::-1, ::-1]
         )
 
     def closing(self, multivariate_image, structuring_element):
         return self.erosion(
-            multivariate_image=self.dilation(
-                multivariate_image=multivariate_image,
+            self.dilation(
+                multivariate_image,
                 structuring_element=structuring_element),
             structuring_element=structuring_element[::-1, ::-1]
         )
@@ -54,49 +54,59 @@ class BaseMorphology:
     def tophat_opening(self, multivariate_image, structuring_element):
         return self.dist(
             multivariate_image,
-            self.opening(multivariate_image=multivariate_image, structuring_element=structuring_element)
+            self.opening(multivariate_image, structuring_element=structuring_element)
         )
 
     def tophat_closing(self, multivariate_image, structuring_element):
         return self.dist(
             multivariate_image,
-            self.closing(multivariate_image=multivariate_image, structuring_element=structuring_element)
+            self.closing(multivariate_image, structuring_element=structuring_element)
         )
 
     def gradient(self, multivariate_image, structuring_element):
         """ Distance between erosion and dilation of the image. """
         return self.dist(
-            self.erosion(multivariate_image=multivariate_image, structuring_element=structuring_element),
-            self.dilation(multivariate_image=multivariate_image, structuring_element=structuring_element)
+            self.erosion(multivariate_image, structuring_element=structuring_element),
+            self.dilation(multivariate_image, structuring_element=structuring_element)
         )
 
-    def inpaint(self, multivariate_image, structuring_element, max_iterations=100):
+    def inpaint_with_steps(self, multivariate_image, structuring_element, max_iterations=10):
         """ Iteratively recover pixels given by 0.5 * (opening + closing). """
         inpainted_image = multivariate_image
+        steps = [inpainted_image.copy()]
         mask_unknown = np.isnan(inpainted_image[:, :, 0])
         idx_it = 0
         while np.any(mask_unknown) and idx_it <= max_iterations:
-            closing = self.closing(multivariate_image=inpainted_image,
+            closing = self.closing(inpainted_image,
                                    structuring_element=structuring_element)
-            opening = self.opening(multivariate_image=inpainted_image,
+            opening = self.opening(inpainted_image,
                                    structuring_element=structuring_element)
-            mask_recovered = mask_unknown & ~closing[:, :, 0].isnan() & ~opening[:, :, 0].isnan()
+            mask_recovered = mask_unknown & ~np.isnan(closing[:, :, 0]) & ~np.isnan(opening[:, :, 0])
             if not np.any(mask_recovered):
                 break
             mask_recovered = np.tile(mask_recovered[:, :, np.newaxis], (1, 1, 3))
             inpainted_image[mask_recovered] = 0.5 * (closing[mask_recovered] + opening[mask_recovered])
             mask_unknown = np.isnan(inpainted_image[:, :, 0])
             idx_it += 1
+            steps += [inpainted_image.copy()]
+        return inpainted_image, steps
+
+    def inpaint(self, multivariate_image, structuring_element, max_iterations=10):
+        """ Iteratively recover pixels given by 0.5 * (opening + closing). """
+        inpainted_image, _ = self.inpaint_with_steps(multivariate_image,
+                                                     structuring_element=structuring_element,
+                                                     max_iterations=max_iterations)
         return inpainted_image
 
-    def contrast_mapping(self, multivariate_image, structuring_element, num_iterations=10):
+    def contrast_mapping_with_steps(self, multivariate_image, structuring_element, num_iterations=3):
         """ Iteratively change pixels as the most similar one between their dilation and their erosion. """
         contrasted_image = multivariate_image
         idx_it = 0
+        steps = [contrasted_image.copy()]
         while idx_it <= num_iterations:
-            dilation = self.dilation(multivariate_image=multivariate_image,
+            dilation = self.dilation(multivariate_image,
                                      structuring_element=structuring_element)
-            erosion = self.erosion(multivariate_image=multivariate_image,
+            erosion = self.erosion(multivariate_image,
                                    structuring_element=structuring_element)
             d_dilation = self.dist(multivariate_image, dilation)
             d_erosion = self.dist(multivariate_image, erosion)
@@ -104,22 +114,57 @@ class BaseMorphology:
             mask_dilation_is_closest = np.tile(mask_dilation_is_closest[:, :, np.newaxis], (1, 1, 3))
             contrasted_image[mask_dilation_is_closest] = dilation[mask_dilation_is_closest]
             contrasted_image[~mask_dilation_is_closest] = erosion[~mask_dilation_is_closest]
+            idx_it += 1
+            steps += [contrasted_image.copy()]
+        return contrasted_image, steps
+
+    def contrast_mapping(self, multivariate_image, structuring_element, num_iterations=10):
+        """ Iteratively change pixels as the most similar one between their dilation and their erosion. """
+        contrasted_image, _ = self.contrast_mapping_with_steps(
+            multivariate_image,
+            structuring_element=structuring_element,
+            num_iterations=num_iterations,
+        )
         return contrasted_image
 
 
 class MorphologyInCIELab(BaseMorphology):
 
     def dilation(self, image_as_rgb, structuring_element):
-        lab_image = color.rgb2lab(image_as_rgb)/100.0
+        lab_image = _rgb_to_lab(image_as_rgb)/100.0
         lab_dilation = super().dilation(multivariate_image=lab_image,
                                         structuring_element=structuring_element) * 100.0
-        return color.lab2rgb(lab_dilation)
+        return _lab_to_rgb(lab_dilation)
 
     def erosion(self, image_as_rgb, structuring_element):
-        lab_image = color.rgb2lab(image_as_rgb)/100.0
+        lab_image = _rgb_to_lab(image_as_rgb)/100.0
         lab_erosion = super().erosion(multivariate_image=lab_image,
                                       structuring_element=structuring_element) * 100.0
-        return color.lab2rgb(lab_erosion)
+        return _lab_to_rgb(lab_erosion)
+
+
+def _rgb_to_lab(image_as_rgb):
+    # Wrapper of skimage.color.rgb2lab to avoid computing on NaN values
+    rgb_flat = image_as_rgb.reshape((-1, 1, image_as_rgb.shape[2]))
+    nonnan_mask = ~np.isnan(rgb_flat[:, 0, 0])
+    lab_flat = np.full(shape=rgb_flat.shape,
+                       dtype='float64',
+                       fill_value=np.nan)
+    lab_flat[nonnan_mask, :, :] = color.rgb2lab(rgb_flat[nonnan_mask, :, :])
+    lab = lab_flat.reshape(image_as_rgb.shape)
+    return lab
+
+
+def _lab_to_rgb(image_as_lab):
+    # Wrapper of skimage.color.lab2rgb to avoid computing on NaN values
+    lab_flat = image_as_lab.reshape((-1, 1, image_as_lab.shape[2]))
+    nonnan_mask = ~np.isnan(lab_flat[:, 0, 0])
+    rgb_flat = np.full(shape=lab_flat.shape,
+                       dtype='float64',
+                       fill_value=np.nan)
+    rgb_flat[nonnan_mask, :, :] = color.lab2rgb(lab_flat[nonnan_mask, :, :])
+    rgb = rgb_flat.reshape(image_as_lab.shape)
+    return rgb
 
 
 def soften_structuring_element(structuring_element, sz_averaging_kernel_in_px=None, preserve_shape=True):
