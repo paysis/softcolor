@@ -72,6 +72,12 @@ class BaseMorphology:
 
     def inpaint_with_steps(self, multivariate_image, structuring_element, max_iterations=10):
         """ Iteratively recover pixels given by 0.5 * (opening + closing). """
+        if not np.all(np.isnan(structuring_element) | (structuring_element == 1)):
+            msg = """
+            Inpainting with structuring element which contains elements not being 1 or np.nan:
+            It may give non-interpretable results, we strongly recommend using structuring
+            elements that only contain 1 or np.nan."""
+            warn(msg)
         inpainted_image = multivariate_image.copy()
         steps = [inpainted_image.copy()]
         mask_unknown = np.isnan(inpainted_image[:, :, 0])
@@ -88,7 +94,7 @@ class BaseMorphology:
             inpainted_image[mask_recovered] = 0.5 * (closing[mask_recovered] + opening[mask_recovered])
             mask_unknown = np.isnan(inpainted_image[:, :, 0])
             idx_it += 1
-            steps += [opening.copy(), closing.copy(), inpainted_image.copy()]
+            steps += [inpainted_image.copy()]
         return inpainted_image, steps
 
     def inpaint(self, multivariate_image, structuring_element, max_iterations=10):

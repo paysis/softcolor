@@ -5,9 +5,10 @@
     * Very simple behaviour (1-d images, bi-valued, non-bivalued).
     * Check equal result with pixel-wise implementation.
 
+* Add logging
+
 * Fix examples:
-    * Fix plots.
-    * Fix behaviour of inpaint/contrast mapping.
+    * Fix behaviour of contrast mapping.
     * Test TH.
 
 * Upload to Pip.
