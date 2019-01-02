@@ -60,7 +60,7 @@ def _base_soft_color_operator_limited_range(padded_image,
     se_after_center_included = [e+1 for e in se_after_center]
 
     range_i[1] = min(range_i[1], output.shape[0])
-    range_j[1] = min(range_j[1], output.shape[0])
+    range_j[1] = min(range_j[1], output.shape[1])
     num_i = range_i[1] - range_i[0]
     num_j = range_j[1] - range_j[0]
 
