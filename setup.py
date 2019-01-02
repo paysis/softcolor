@@ -9,14 +9,13 @@ setup(
     author='Pedro Bibiloni',  # Type in your name
     author_email='pedro@bibiloni.es',  # Type in your E-Mail
     url='https://github.com/pbibiloni/softcolor',  # Provide either the link to your github or to your website
-    download_url='https://github.com/pbibiloni/softcolor/archive/v_01.tar.gz',  # I explain this later on
+    download_url='https://github.com/pbibiloni/softcolor/archive/v_01.tar.gz',  # Source code
     keywords=['Soft Color Morphology', 'Mathematical Morphology', 'Aggregation Functions', 'Image Processing'],
     # Keywords that define your package best
     install_requires=[  # All imports
         'numpy',
         'scipy',
         'scikit-image',
-        'numba',
     ],
     classifiers=[
         'Development Status :: 3 - Alpha',

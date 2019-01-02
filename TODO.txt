@@ -1,5 +1,5 @@
 
-* Add tests:
+* Add unit tests:
     * Very simple behaviour (1-d images, bi-valued, non-bivalued).
     * Check equal result with pixel-wise implementation.
 
