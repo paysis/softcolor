@@ -73,7 +73,7 @@ def _base_soft_color_operator_limited_range(padded_image,
                                      dtype=output.dtype)
     for idx_unique in range(se_uniques.size):
         idx_se_flat = se_unique_to_idx[idx_unique]
-        idx_i_se, idx_j_se = np.unravel_index(idx_se_flat, dims=sz_se)
+        idx_i_se, idx_j_se = np.unravel_index(idx_se_flat, shape=sz_se)
         if np.isnan(structuring_element[idx_i_se, idx_j_se]):
             precomputed_unique_se[:, :, idx_unique] = np.nan
         else:
@@ -144,7 +144,7 @@ def _base_soft_color_operator_limited_range(padded_image,
         best_idx = idcs_se_tied[best_idx]
         selected_se_idx[res_i, res_j] = best_idx
 
-    relative_delta_i, relative_delta_j = np.unravel_index(selected_se_idx, dims=sz_se)
+    relative_delta_i, relative_delta_j = np.unravel_index(selected_se_idx, shape=sz_se)
     grid_out_i = grid_val_i + range_i[0]
     grid_out_j = grid_val_j + range_j[0]
     grid_pad_i = grid_out_i + relative_delta_i
